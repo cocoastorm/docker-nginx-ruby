@@ -1,7 +1,5 @@
 FROM alpine:3
 
-ARG BUILD_CORES
-
 ARG NGINX_VER=1.16.1
 ARG RUBY_VER=2.6.5
 
@@ -60,31 +58,26 @@ RUN apk -U add \
    su-exec \
    curl \
    pcre \
-   zlib
-
-RUN mkdir -p /usr/src
-
-RUN NB_CORES=${BUILD_CORES-$(getconf _NPROCESSORS_CONF)} \
+   zlib \
+  && mkdir -p /usr/src \
+  && NB_CORES=$(getconf _NPROCESSORS_CONF) && RUBY_VER_ONE=$(echo $RUBY_VER | cut -d. -f1-2) \
   && wget http://nginx.org/download/nginx-${NGINX_VER}.tar.gz -O /tmp/nginx-${NGINX_VER}.tar.gz \
   && wget http://nginx.org/download/nginx-${NGINX_VER}.tar.gz.asc -O /tmp/nginx-${NGINX_VER}.tar.gz.asc \
+  && wget https://cache.ruby-lang.org/pub/ruby/${RUBY_VER_ONE}/ruby-${RUBY_VER}.tar.gz -O /tmp/ruby-${RUBY_VER}.tar.gz \
   && tar xzf /tmp/nginx-${NGINX_VER}.tar.gz -C /usr/src \
+  && tar xzf /tmp/ruby-${RUBY_VER}.tar.gz -C /usr/src \
+  # Build NGINX
   && cd /usr/src/nginx-${NGINX_VER} \
   && ./configure --with-cc-opt="-O3 -fPIE -fstack-protector-strong" ${NGINX_CONF} \
   && make -j ${NB_CORES} \
-  && make install
-
-RUN NB_CORES=${BUILD_CORES-$(getconf _NPROCESSORS_CONF)} \
-  && RUBY_VER_ONE=$(echo $RUBY_VER | cut -d. -f1-2) \ 
-  && wget https://cache.ruby-lang.org/pub/ruby/${RUBY_VER_ONE}/ruby-${RUBY_VER}.tar.gz -O /tmp/ruby-${RUBY_VER}.tar.gz \
-  && tar xzf /tmp/ruby-${RUBY_VER}.tar.gz -C /usr/src \
+  && make install \
+  # Build Ruby
   && cd /usr/src/ruby-${RUBY_VER} \
   && ./configure ${RUBY_CONF} \
   && make -j ${NB_CORES} \
-  && make install
-
-RUN gem install unicorn
-
-RUN chmod u+x /usr/local/bin/* /etc/s6.d/*/* \
+  && make install \
+  && gem install unicorn \
+  && chmod u+x /usr/local/bin/* /etc/s6.d/*/* \
   && apk del ${BUILD_DEPS} \
   && rm -rf /tmp/* /var/cache/apk/* /usr/src/* \
   && mkdir -p /nginx/logs /nginx/run /unicorn/logs /unicorn/run
